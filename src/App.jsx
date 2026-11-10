@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
-import { Mic, Upload, FileText, Settings, Moon, Sun, Sparkles, Send, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mic, Upload, FileText, Settings, Moon, Sun, Sparkles, Send, CheckCircle2, Trash2 } from 'lucide-react';
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [apiKey, setApiKey] = useState('AQ.Ab8RN6JSxDlxoNh-CTJEAIgn1Al5m5HPV0pOdoPp2z1fkSkrYg');
+  
+  // Kunin ang API key mula sa localStorage kung meron na, o gamitin ang default
+  const [apiKey, setApiKey] = useState(() => {
+    return localStorage.getItem('gemini_api_key') || 'AQ.Ab8RN6JSxDlxoNh-CTJEAIgn1Al5m5HPV0pOdoPp2z1fkSkrYg';
+  });
+
   const [activeTab, setActiveTab] = useState('notes');
   const [inputMode, setInputMode] = useState('text');
   const [textContent, setTextContent] = useState('');
@@ -14,14 +19,28 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [selectedFileName, setSelectedFileName] = useState('');
   const [saveMessage, setSaveMessage] = useState(false);
+  
+  const [savedNotes, setSavedNotes] = useState(() => {
+    const saved = localStorage.getItem('my_ai_notes');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // I-save ang notes sa localStorage tuwing may magbabago
+  useEffect(() => {
+    localStorage.setItem('my_ai_notes', JSON.stringify(savedNotes));
+  }, [savedNotes]);
 
   const handleProcessWithAI = async () => {
-    if (!textContent && inputMode === 'text') return;
+    const currentInput = textContent || selectedFileName;
+    if (!currentInput) return;
     setLoading(true);
     setResult(null);
 
+    let summaryText = "";
+    let tagsList = ["AIProcessed", "SmartNotes"];
+
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -31,9 +50,9 @@ export default function App() {
             parts: [{
               text: `Analyze the following note text in English, Tagalog, or Taglish and provide:
               1. Summary: A clear and concise summary of the main points.
-              2. Tags: 3 to 5 relevant tags separated by commas.
+              2. Tags: 2 to 3 relevant tags separated by commas.
               
-              Note content: "${textContent || selectedFileName}"`
+              Note content: "${currentInput}"`
             }]
           }]
         })
@@ -41,34 +60,44 @@ export default function App() {
 
       const data = await response.json();
       if (data.candidates && data.candidates[0].content.parts[0].text) {
-        setResult({
-          summary: data.candidates[0].content.parts[0].text,
-          tags: ["AIProcessed", "SmartNotes", "MobileApp"]
-        });
+        summaryText = data.candidates[0].content.parts[0].text;
       } else {
-        setResult({
-          summary: "Error processing with AI. Please check your API key.",
-          tags: ["Error"]
-        });
+        summaryText = "Error processing with AI. Please check your API key in Settings.";
+        tagsList = ["Error"];
       }
     } catch (error) {
-      setResult({
-        summary: "Network connection error occurred.",
-        tags: ["Error"]
-      });
-    } finally {
-      setLoading(false);
+      summaryText = "Network connection error occurred.";
+      tagsList = ["Error"];
     }
+
+    const newNote = {
+      id: Date.now(),
+      content: currentInput,
+      summary: summaryText,
+      tags: tagsList,
+      date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setSavedNotes([newNote, ...savedNotes]);
+    setResult(newNote);
+    setLoading(false);
+    setTextContent('');
+    setSelectedFileName('');
+  };
+
+  const handleDeleteNote = (id) => {
+    setSavedNotes(savedNotes.filter(note => note.id !== id));
   };
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedFileName(e.target.files[0].name);
-      setTextContent(`[Uploaded Audio File: ${e.target.files[0].name}]`);
     }
   };
 
   const handleSaveSettings = () => {
+    // I-save ang API key sa localStorage ng browser
+    localStorage.setItem('gemini_api_key', apiKey);
     setSaveMessage(true);
     setTimeout(() => setSaveMessage(false), 3000);
   };
@@ -190,7 +219,7 @@ export default function App() {
                     placeholder="Example: Meeting notes about project deployment..."
                     style={{
                       width: '100%',
-                      height: '110px',
+                      height: '100px',
                       padding: '12px',
                       borderRadius: '16px',
                       border: `2px solid ${primaryColor}`,
@@ -211,17 +240,17 @@ export default function App() {
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '30px',
+                  padding: '24px',
                   borderRadius: '20px',
                   border: `2px dashed ${primaryColor}`,
                   backgroundColor: secondaryBg + '33',
-                  gap: '12px'
+                  gap: '10px'
                 }}>
                   <button 
                     onClick={() => setIsRecording(!isRecording)}
                     style={{
-                      width: '56px',
-                      height: '56px',
+                      width: '50px',
+                      height: '50px',
                       borderRadius: '50%',
                       border: 'none',
                       display: 'flex',
@@ -233,7 +262,7 @@ export default function App() {
                       boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
                     }}
                   >
-                    <Mic size={24} />
+                    <Mic size={22} />
                   </button>
                   <p style={{ fontSize: '11px', fontWeight: '700', margin: 0 }}>
                     {isRecording ? "Recording voice note... 🔴" : "Tap to record audio note"}
@@ -247,11 +276,11 @@ export default function App() {
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '28px',
+                  padding: '20px',
                   borderRadius: '20px',
                   border: `2px dashed ${primaryColor}`,
                   backgroundColor: secondaryBg + '33',
-                  gap: '12px',
+                  gap: '8px',
                   textAlign: 'center'
                 }}>
                   <label htmlFor="audio-file-input" style={{
@@ -259,27 +288,26 @@ export default function App() {
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: '10px',
+                    gap: '8px',
                     width: '100%'
                   }}>
                     <div style={{
-                      width: '56px',
-                      height: '56px',
+                      width: '46px',
+                      height: '46px',
                       borderRadius: '50%',
                       backgroundColor: primaryColor,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       color: darkMode ? '#040607' : '#FFFFFF',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.15)',
                       margin: '0 auto'
                     }}>
-                      <Upload size={26} />
+                      <Upload size={22} />
                     </div>
-                    <span style={{ fontSize: '12px', fontWeight: '700' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700' }}>
                       {selectedFileName ? `📁 ${selectedFileName}` : "Tap upload icon to select audio"}
                     </span>
-                    <span style={{ fontSize: '10px', opacity: 0.7 }}>Supports MP3, WAV, M4A</span>
                   </label>
                   <input 
                     id="audio-file-input" 
@@ -297,11 +325,11 @@ export default function App() {
                 disabled={loading}
                 style={{
                   width: '100%',
-                  padding: '14px',
+                  padding: '12px',
                   borderRadius: '16px',
                   border: 'none',
                   fontWeight: '700',
-                  fontSize: '13px',
+                  fontSize: '12px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -312,43 +340,70 @@ export default function App() {
                   boxShadow: '0 6px 16px rgba(0,0,0,0.15)'
                 }}
               >
-                {loading ? <Sparkles className="animate-spin" size={18} /> : <Send size={16} />}
-                <span>{loading ? "Analyzing with Gemini AI..." : "Process Note with AI 💖"}</span>
+                {loading ? <Sparkles className="animate-spin" size={16} /> : <Send size={14} />}
+                <span>{loading ? "Analyzing with Gemini AI..." : "Process & Save Note 💖"}</span>
               </button>
 
-              {/* AI Result Card */}
-              {result && (
-                <div style={{
-                  padding: '16px',
-                  borderRadius: '20px',
-                  border: `2px solid ${primaryColor}`,
-                  backgroundColor: secondaryBg,
-                  color: darkMode ? '#E3D9FC' : '#4A3B32',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700', fontSize: '12px' }}>
-                    <CheckCircle2 size={16} />
-                    <span>AI Analysis Result</span>
-                  </div>
-                  <p style={{ fontSize: '11px', lineHeight: '1.5', margin: 0, whiteSpace: 'pre-wrap' }}>
-                    {result.summary}
-                  </p>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', paddingTop: '4px' }}>
-                    {result.tags.map((tag, idx) => (
-                      <span key={idx} style={{
-                        fontSize: '9px',
-                        fontWeight: '700',
-                        padding: '4px 10px',
-                        borderRadius: '20px',
-                        backgroundColor: darkMode ? '#4928C2' : '#FFFFFF',
-                        color: darkMode ? '#E3D9FC' : '#4A3B32'
-                      }}>
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
+              {/* Saved Notes Section Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                <h3 style={{ fontSize: '13px', fontWeight: '700', margin: 0 }}>📚 Saved Notes ({savedNotes.length})</h3>
+              </div>
+
+              {/* List of Saved Notes */}
+              {savedNotes.length === 0 ? (
+                <p style={{ fontSize: '11px', opacity: 0.7, textAlign: 'center', margin: '8px 0' }}>
+                  No saved notes yet. Create one above! ✨
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {savedNotes.map((note) => (
+                    <div key={note.id} style={{
+                      padding: '12px',
+                      borderRadius: '16px',
+                      border: `1px solid ${primaryColor}`,
+                      backgroundColor: cardBg,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.05)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '9px', fontWeight: '700', opacity: 0.7 }}>🕒 {note.date}</span>
+                        <button 
+                          onClick={() => handleDeleteNote(note.id)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#ef4444',
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: '2px'
+                          }}
+                          title="Delete Note"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                      <p style={{ fontSize: '11px', lineHeight: '1.4', margin: 0, whiteSpace: 'pre-wrap' }}>
+                        {note.summary}
+                      </p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', paddingTop: '2px' }}>
+                        {note.tags.map((tag, idx) => (
+                          <span key={idx} style={{
+                            fontSize: '8px',
+                            fontWeight: '700',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            backgroundColor: secondaryBg,
+                            color: darkMode ? '#E3D9FC' : '#4A3B32'
+                          }}>
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </>
@@ -416,7 +471,7 @@ export default function App() {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '600' }}>Gemini API Key (Embedded):</label>
+                <label style={{ fontSize: '11px', fontWeight: '600' }}>Gemini API Key (Editable):</label>
                 <input 
                   type="password" 
                   value={apiKey} 
