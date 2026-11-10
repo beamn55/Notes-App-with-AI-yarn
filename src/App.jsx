@@ -3,8 +3,8 @@ import { Mic, Upload, FileText, Settings, Moon, Sun, Sparkles, Send, CheckCircle
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(false);
-  const [username, setUsername] = useState('Nathan');
-  const [password, setPassword] = useState('••••••••');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [apiKey, setApiKey] = useState('AQ.Ab8RN6JSxDlxoNh-CTJEAIgn1Al5m5HPV0pOdoPp2z1fkSkrYg');
   const [activeTab, setActiveTab] = useState('notes');
   const [inputMode, setInputMode] = useState('text');
@@ -12,6 +12,8 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [selectedFileName, setSelectedFileName] = useState('');
+  const [saveMessage, setSaveMessage] = useState(false);
 
   const handleProcessWithAI = async () => {
     if (!textContent && inputMode === 'text') return;
@@ -31,7 +33,7 @@ export default function App() {
               1. Summary: A clear and concise summary of the main points.
               2. Tags: 3 to 5 relevant tags separated by commas.
               
-              Note content: "${textContent}"`
+              Note content: "${textContent || selectedFileName}"`
             }]
           }]
         })
@@ -57,6 +59,18 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFileName(e.target.files[0].name);
+      setTextContent(`[Uploaded Audio File: ${e.target.files[0].name}]`);
+    }
+  };
+
+  const handleSaveSettings = () => {
+    setSaveMessage(true);
+    setTimeout(() => setSaveMessage(false), 3000);
   };
 
   const bgStyle = darkMode ? '#040607' : '#FFDBDB';
@@ -103,7 +117,7 @@ export default function App() {
           padding: '24px 20px 16px 20px',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'between',
+          justifyContent: 'space-between',
           backgroundColor: headerBg,
           borderBottom: darkMode ? '2px solid #4928C2' : '2px solid #FDA8BF'
         }}>
@@ -233,16 +247,47 @@ export default function App() {
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '30px',
+                  padding: '28px',
                   borderRadius: '20px',
                   border: `2px dashed ${primaryColor}`,
                   backgroundColor: secondaryBg + '33',
-                  gap: '10px',
+                  gap: '12px',
                   textAlign: 'center'
                 }}>
-                  <Upload size={28} color={primaryColor} />
-                  <p style={{ fontSize: '11px', fontWeight: '700', margin: 0 }}>Upload MP3, WAV or M4A file</p>
-                  <input type="file" accept="audio/*" style={{ fontSize: '11px', width: '100%', marginTop: '6px' }} />
+                  <label htmlFor="audio-file-input" style={{
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '10px',
+                    width: '100%'
+                  }}>
+                    <div style={{
+                      width: '56px',
+                      height: '56px',
+                      borderRadius: '50%',
+                      backgroundColor: primaryColor,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: darkMode ? '#040607' : '#FFFFFF',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      margin: '0 auto'
+                    }}>
+                      <Upload size={26} />
+                    </div>
+                    <span style={{ fontSize: '12px', fontWeight: '700' }}>
+                      {selectedFileName ? `📁 ${selectedFileName}` : "Tap upload icon to select audio"}
+                    </span>
+                    <span style={{ fontSize: '10px', opacity: 0.7 }}>Supports MP3, WAV, M4A</span>
+                  </label>
+                  <input 
+                    id="audio-file-input" 
+                    type="file" 
+                    accept="audio/*" 
+                    onChange={handleFileChange}
+                    style={{ display: 'none' }} 
+                  />
                 </div>
               )}
 
@@ -313,11 +358,27 @@ export default function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '4px' }}>
               <h2 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>✨ Settings & Profile</h2>
               
+              {saveMessage && (
+                <div style={{
+                  padding: '10px 12px',
+                  borderRadius: '12px',
+                  backgroundColor: darkMode ? '#4928C2' : '#FF5C89',
+                  color: '#FFFFFF',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  textAlign: 'center',
+                  boxShadow: '0 4px 10px rgba(0,0,0,0.15)'
+                }}>
+                  ✨ Settings saved successfully, Bestie! 🎉
+                </div>
+              )}
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '11px', fontWeight: '600' }}>Username:</label>
                 <input 
                   type="text" 
                   value={username} 
+                  placeholder="Enter your username..."
                   onChange={(e) => setUsername(e.target.value)}
                   style={{
                     width: '100%',
@@ -338,6 +399,7 @@ export default function App() {
                 <input 
                   type="password" 
                   value={password} 
+                  placeholder="Enter your password..."
                   onChange={(e) => setPassword(e.target.value)}
                   style={{
                     width: '100%',
@@ -374,7 +436,7 @@ export default function App() {
               </div>
 
               <button 
-                onClick={() => alert("Settings saved successfully!")}
+                onClick={handleSaveSettings}
                 style={{
                   width: '100%',
                   padding: '12px',
