@@ -16,8 +16,7 @@ export default function App() {
   const [textContent, setTextContent] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [selectedFileName, setSelectedFileName] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
   const [saveMessage, setSaveMessage] = useState(false);
   
   const [chatQuery, setChatQuery] = useState('');
@@ -40,10 +39,50 @@ export default function App() {
     localStorage.setItem('pdf_ai_notes_clean', JSON.stringify(savedNotes));
   }, [savedNotes]);
 
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const base64String = reader.result.split(',')[1];
+        resolve(base64String);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleMicToggle = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    if (isRecording) {
+      setIsRecording(false);
+    } else {
+      setIsRecording(true);
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setTextContent(transcript);
+        setIsRecording(false);
+      };
+
+      recognition.onerror = () => setIsRecording(false);
+      recognition.onend = () => setIsRecording(false);
+
+      recognition.start();
+    }
+  };
+
   const generateDynamicAnalysis = (input) => {
     const lower = input.toLowerCase();
-    
-    let summary = `Summary: Note regarding "${input.length > 50 ? input.slice(0, 50) + '...' : input}". High-accuracy capture generated.`;
+    let summary = `Summary: Voice/Text transcription captured: "${input.length > 60 ? input.slice(0, 60) + '...' : input}".`;
 
     let actions = [];
     if (lower.includes('tomorrow')) actions.push('Task scheduled for tomorrow');
@@ -52,41 +91,40 @@ export default function App() {
     }
     if (lower.includes('submit') || lower.includes('send') || lower.includes('email')) actions.push('Submit or send requested files');
     if (lower.includes('meeting') || lower.includes('call') || lower.includes('discuss')) actions.push('Prepare notes for scheduled discussion');
-    if (lower.includes('practice') || lower.includes('review') || lower.includes('study')) actions.push('Complete practice session and review notes');
+    if (lower.includes('practice') || lower.includes('review') || lower.includes('study') || lower.includes('lunch')) actions.push('Complete practice session and review notes');
     
-    let actionStr = actions.length > 0 ? actions.join('; ') : 'None detected in note';
+    let actionStr = actions.length > 0 ? actions.join('; ') : 'None detected in audio/text';
 
-    let tags = ['#SmartNotes'];
-    if (lower.includes('english') || lower.includes('practice') || lower.includes('study')) tags.push('#Learning');
-    if (lower.includes('meeting') || lower.includes('project') || lower.includes('work')) tags.push('#Work');
-    if (lower.includes('todo') || lower.includes('task') || lower.includes('submit')) tags.push('#ActionItem');
-    if (tags.length < 3) tags.push('#AIProcessed');
+    let words = input.trim().split(/\s+/);
+    let topWords = Array.from(new Set(words.filter(w => w.length > 3)))
+      .slice(0, 3)
+      .map(w => `#${w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()}`);
+
+    let tags = topWords.length > 0 ? topWords : ['#AudioTranscribe', '#SmartNotes', '#AIProcessed'];
 
     return `${summary}\nActionItems: ${actionStr}\nTags: ${tags.slice(0, 3).join(', ')}`;
   };
 
   const handleProcessWithAI = async () => {
-    const currentInput = textContent || selectedFileName;
-    if (!currentInput) return;
-    setLoading(true);
-    setResult(null);
+    if (inputMode === 'text' && !textContent.trim()) return;
+    if (inputMode === 'upload' && !selectedFile) return;
 
+    setLoading(true);
     let summaryText = "";
+    let rawContent = textContent;
 
     try {
-      if (apiKey && apiKey.length > 10) {
+      if (inputMode === 'upload' && selectedFile && apiKey && apiKey.length > 10) {
+        const base64Audio = await fileToBase64(selectedFile);
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{
-              parts: [{
-                text: `Analyze this note following requirements. Output format:
-                Summary: [Brief 1-sentence summary]
-                ActionItems: [Extracted tasks or None]
-                Tags: [3 hashtags]
-                Note content: "${currentInput}"`
-              }]
+              parts: [
+                { text: "Listen to this audio. Transcribe the spoken words, summarize, extract action items, and provide 3 hashtags:\nSummary: [Summary]\nActionItems: [Tasks or None]\nTags: [3 Hashtags]" },
+                { inline_data: { mime_type: selectedFile.type || "audio/mp3", data: base64Audio } }
+              ]
             }]
           })
         });
@@ -94,29 +132,33 @@ export default function App() {
         const data = await response.json();
         if (data.candidates && data.candidates[0].content.parts[0].text) {
           summaryText = data.candidates[0].content.parts[0].text;
+          rawContent = `[Audio File: ${selectedFile.name}]`;
         } else {
-          summaryText = generateDynamicAnalysis(currentInput);
+          rawContent = selectedFile.name;
+          summaryText = generateDynamicAnalysis(selectedFile.name);
         }
       } else {
+        if (inputMode === 'upload' && selectedFile) {
+          rawContent = selectedFile.name;
+        }
         await new Promise(resolve => setTimeout(resolve, 800));
-        summaryText = generateDynamicAnalysis(currentInput);
+        summaryText = generateDynamicAnalysis(rawContent);
       }
     } catch (error) {
-      summaryText = generateDynamicAnalysis(currentInput);
+      summaryText = generateDynamicAnalysis(rawContent || "Audio Input Note");
     }
 
     const newNote = {
       id: Date.now(),
-      content: currentInput,
+      content: rawContent,
       fullAnalysis: summaryText,
       date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
     setSavedNotes([newNote, ...savedNotes]);
-    setResult(newNote);
     setLoading(false);
     setTextContent('');
-    setSelectedFileName('');
+    setSelectedFile(null);
   };
 
   const handleChatWithNotes = async () => {
@@ -145,7 +187,7 @@ export default function App() {
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFileName(e.target.files[0].name);
+      setSelectedFile(e.target.files[0]);
     }
   };
 
@@ -349,7 +391,7 @@ export default function App() {
                       gap: '8px'
                     }}>
                       <button 
-                        onClick={() => setIsRecording(!isRecording)}
+                        onClick={handleMicToggle}
                         style={{
                           width: '46px',
                           height: '46px',
@@ -367,8 +409,13 @@ export default function App() {
                         <Mic size={20} />
                       </button>
                       <p style={{ fontSize: '10px', fontWeight: '700', margin: 0 }}>
-                        {isRecording ? "Recording active... 🔴" : "Tap to record voice-to-text"}
+                        {isRecording ? "Listening... Speak now 🎙️🔴" : "Tap mic to start speech-to-text"}
                       </p>
+                      {textContent && (
+                        <p style={{ fontSize: '10px', margin: '4px 0 0 0', opacity: 0.9 }}>
+                          Transcribed: "{textContent}"
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -408,7 +455,7 @@ export default function App() {
                           <Upload size={18} />
                         </div>
                         <span style={{ fontSize: '10px', fontWeight: '700' }}>
-                          {selectedFileName ? `📁 ${selectedFileName}` : "Tap upload icon for Audio File"}
+                          {selectedFile ? `📁 ${selectedFile.name}` : "Tap upload icon for Audio File"}
                         </span>
                       </label>
                       <input 
@@ -442,7 +489,7 @@ export default function App() {
                     }}
                   >
                     {loading ? <Sparkles className="animate-spin" size={15} /> : <Send size={13} />}
-                    <span>{loading ? "Auto-Summarizing..." : "Process Note with AI ✨"}</span>
+                    <span>{loading ? "Transcribing & Analyzing Audio..." : "Process Note with AI ✨"}</span>
                   </button>
 
                   <div style={{
