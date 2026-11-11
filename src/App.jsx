@@ -7,7 +7,7 @@ export default function App() {
   const [password, setPassword] = useState('');
   
   const [apiKey, setApiKey] = useState(() => {
-    return localStorage.getItem('gemini_api_key') || 'ILAGAY_DITO_ANG_API_KEY';
+    return localStorage.getItem('gemini_api_key') || 'AQ.Ab8RN6JnPJqN0p1ghfRe71yTaX7AuUoYHF8wj4V0LOuu2U-FBQ';
   });
 
   const [activeTab, setActiveTab] = useState('notes');
