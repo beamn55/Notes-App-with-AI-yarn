@@ -24,6 +24,8 @@ export default function App() {
   const [isSearchingNotes, setIsSearchingNotes] = useState(false);
 
   const recognitionRef = useRef(null);
+  const isRecordingRef = useRef(false);
+  const mediaStreamRef = useRef(null);
 
   const [savedNotes, setSavedNotes] = useState(() => {
     const saved = localStorage.getItem('pdf_ai_notes_clean');
@@ -41,6 +43,20 @@ export default function App() {
     localStorage.setItem('pdf_ai_notes_clean', JSON.stringify(savedNotes));
   }, [savedNotes]);
 
+  const stopRecordingCompletely = () => {
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+  };
+
   const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -53,59 +69,68 @@ export default function App() {
     });
   };
 
-  const handleMicToggle = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Speech recognition is not supported in this browser.");
+  const handleMicToggle = async () => {
+    if (isRecordingRef.current) {
+      stopRecordingCompletely();
       return;
     }
 
-    if (isRecording) {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      setIsRecording(false);
-    } else {
-      try {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      isRecordingRef.current = true;
+      setIsRecording(true);
 
-        recognition.onstart = () => {
-          setIsRecording(true);
-        };
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const startRecognition = () => {
+          if (!isRecordingRef.current) return;
+          const recognition = new SpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.lang = 'en-US';
 
-        recognition.onresult = (event) => {
-          let interimTranscript = '';
-          let finalTranscript = '';
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
-            } else {
-              interimTranscript += event.results[i][0].transcript;
+          recognition.onresult = (event) => {
+            let finalTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript;
+              }
             }
-          }
-          if (finalTranscript || interimTranscript) {
-            setTextContent(prev => prev + ' ' + (finalTranscript || interimTranscript));
-          }
+            if (finalTranscript) {
+              setTextContent(prev => (prev + ' ' + finalTranscript).trim());
+            }
+          };
+
+          recognition.onerror = (event) => {
+            if (event.error === 'not-allowed') {
+              stopRecordingCompletely();
+            }
+          };
+
+          recognition.onend = () => {
+            if (isRecordingRef.current) {
+              setTimeout(() => {
+                if (isRecordingRef.current) {
+                  try {
+                    startRecognition();
+                  } catch (e) {}
+                }
+              }, 300);
+            }
+          };
+
+          recognitionRef.current = recognition;
+          try {
+            recognition.start();
+          } catch (e) {}
         };
 
-        recognition.onerror = (event) => {
-          console.error("Speech recognition error", event.error);
-          setIsRecording(false);
-        };
-
-        recognition.onend = () => {
-          setIsRecording(false);
-        };
-
-        recognitionRef.current = recognition;
-        recognition.start();
-      } catch (error) {
-        console.error(error);
-        setIsRecording(false);
+        startRecognition();
       }
+    } catch (err) {
+      alert("Please allow microphone access in your browser.");
+      stopRecordingCompletely();
     }
   };
 
@@ -135,10 +160,7 @@ export default function App() {
   };
 
   const handleProcessWithAI = async () => {
-    if (isRecording && recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsRecording(false);
-    }
+    stopRecordingCompletely();
 
     if (inputMode === 'text' && !textContent.trim() && !selectedFile) return;
     if (inputMode === 'mic' && !textContent.trim()) return;
@@ -372,10 +394,7 @@ export default function App() {
                       <button 
                         key={mode}
                         onClick={() => {
-                          if (isRecording && recognitionRef.current) {
-                            recognitionRef.current.stop();
-                            setIsRecording(false);
-                          }
+                          stopRecordingCompletely();
                           setInputMode(mode);
                         }}
                         style={{
@@ -433,6 +452,7 @@ export default function App() {
                     }}>
                       <button 
                         onClick={handleMicToggle}
+                        className={isRecording ? 'pulse-box' : ''}
                         style={{
                           width: '46px',
                           height: '46px',
@@ -450,13 +470,27 @@ export default function App() {
                         <Mic size={20} />
                       </button>
                       <p style={{ fontSize: '10px', fontWeight: '700', margin: 0 }}>
-                        {isRecording ? "Listening... Speak now 🎙️🔴" : "Tap mic to start speech-to-text"}
+                        {isRecording ? "Listening... Tap again to stop 🎙️🔴" : "Tap mic to start speech-to-text"}
                       </p>
-                      {textContent && (
-                        <p style={{ fontSize: '10px', margin: '4px 0 0 0', opacity: 0.9 }}>
-                          Transcribed: "{textContent}"
-                        </p>
-                      )}
+                      <textarea
+                        value={textContent}
+                        onChange={(e) => setTextContent(e.target.value)}
+                        placeholder={isRecording ? "Speak clearly into your microphone..." : "Transcribed text will appear here (or type directly)..."}
+                        style={{
+                          width: '100%',
+                          height: '60px',
+                          padding: '8px',
+                          marginTop: '4px',
+                          borderRadius: '10px',
+                          border: `1px solid ${primaryColor}`,
+                          outline: 'none',
+                          resize: 'none',
+                          fontSize: '11px',
+                          fontFamily: "'Fredoka', sans-serif",
+                          backgroundColor: cardBg,
+                          color: textStyle
+                        }}
+                      />
                     </div>
                   )}
 
@@ -742,10 +776,7 @@ export default function App() {
             }}>
               <button 
                 onClick={() => {
-                  if (isRecording && recognitionRef.current) {
-                    recognitionRef.current.stop();
-                    setIsRecording(false);
-                  }
+                  stopRecordingCompletely();
                   setActiveTab('notes');
                 }}
                 style={{
@@ -766,10 +797,7 @@ export default function App() {
               </button>
               <button 
                 onClick={() => {
-                  if (isRecording && recognitionRef.current) {
-                    recognitionRef.current.stop();
-                    setIsRecording(false);
-                  }
+                  stopRecordingCompletely();
                   setActiveTab('settings');
                 }}
                 style={{
