@@ -23,8 +23,8 @@ export default function App() {
   const [chatAnswer, setChatAnswer] = useState('');
   const [isSearchingNotes, setIsSearchingNotes] = useState(false);
 
-  const recognitionRef = useRef(null);
-  const isRecordingRef = useRef(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   const [savedNotes, setSavedNotes] = useState(() => {
     const saved = localStorage.getItem('pdf_ai_notes_clean');
@@ -42,13 +42,42 @@ export default function App() {
     localStorage.setItem('pdf_ai_notes_clean', JSON.stringify(savedNotes));
   }, [savedNotes]);
 
-  const stopRecordingCompletely = () => {
-    isRecordingRef.current = false;
-    setIsRecording(false);
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {}
+  const stopAudioRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const handleMicToggle = async () => {
+    if (isRecording) {
+      stopAudioRecording();
+      return;
+    }
+
+    try {
+      audioChunksRef.current = [];
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach(track => track.stop());
+        setTextContent("[Voice Recording Note Captured Successfully]");
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setTextContent("Recording audio... Speak now (Tap mic again to stop) 🎙️🔴");
+    } catch (err) {
+      alert("Microphone access blocked or not supported by browser.");
+      setIsRecording(false);
     }
   };
 
@@ -62,62 +91,6 @@ export default function App() {
       };
       reader.onerror = (error) => reject(error);
     });
-  };
-
-  const handleMicToggle = () => {
-    if (isRecordingRef.current) {
-      stopRecordingCompletely();
-      return;
-    }
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
-      setTextContent("Voice dictation simulated: English conversation practice and meeting notes review.");
-      setIsRecording(false);
-      return;
-    }
-
-    try {
-      isRecordingRef.current = true;
-      setIsRecording(true);
-      setTextContent("Listening... Speak now 🎙️");
-
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
-
-      recognition.onresult = (event) => {
-        let transcript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          transcript += event.results[i][0].transcript;
-        }
-        if (transcript) {
-          setTextContent(transcript);
-        }
-      };
-
-      recognition.onerror = () => {
-        stopRecordingCompletely();
-      };
-
-      recognition.onend = () => {
-        if (isRecordingRef.current) {
-          try {
-            recognition.start();
-          } catch (e) {
-            stopRecordingCompletely();
-          }
-        }
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err) {
-      setTextContent("Voice captured: Meeting discussion and project timeline review.");
-      stopRecordingCompletely();
-    }
   };
 
   const generateDynamicAnalysis = (input) => {
@@ -146,7 +119,9 @@ export default function App() {
   };
 
   const handleProcessWithAI = async () => {
-    stopRecordingCompletely();
+    if (isRecording) {
+      stopAudioRecording();
+    }
 
     if (inputMode === 'text' && !textContent.trim() && !selectedFile) return;
     if (inputMode === 'mic' && !textContent.trim()) return;
@@ -380,7 +355,7 @@ export default function App() {
                       <button 
                         key={mode}
                         onClick={() => {
-                          stopRecordingCompletely();
+                          if (isRecording) stopAudioRecording();
                           setInputMode(mode);
                         }}
                         style={{
@@ -456,12 +431,12 @@ export default function App() {
                         <Mic size={20} />
                       </button>
                       <p style={{ fontSize: '10px', fontWeight: '700', margin: 0 }}>
-                        {isRecording ? "Listening... Tap again to stop 🎙️🔴" : "Tap mic to start speech-to-text"}
+                        {isRecording ? "Recording active... Tap again to stop 🔴" : "Tap mic to start voice recording"}
                       </p>
                       <textarea
                         value={textContent}
                         onChange={(e) => setTextContent(e.target.value)}
-                        placeholder={isRecording ? "Speak clearly into your microphone..." : "Transcribed text will appear here (or type directly)..."}
+                        placeholder="Voice notes or description will appear here..."
                         style={{
                           width: '100%',
                           height: '60px',
@@ -762,7 +737,7 @@ export default function App() {
             }}>
               <button 
                 onClick={() => {
-                  stopRecordingCompletely();
+                  if (isRecording) stopAudioRecording();
                   setActiveTab('notes');
                 }}
                 style={{
@@ -775,7 +750,7 @@ export default function App() {
                   gap: '2px',
                   opacity: activeTab === 'notes' ? 1 : 0.6,
                   fontWeight: activeTab === 'notes' ? '700' : '400',
-                  color: textBox => textStyle
+                  color: textStyle
                 }}
               >
                 <FileText size={16} />
@@ -783,7 +758,7 @@ export default function App() {
               </button>
               <button 
                 onClick={() => {
-                  stopRecordingCompletely();
+                  if (isRecording) stopAudioRecording();
                   setActiveTab('settings');
                 }}
                 style={{
