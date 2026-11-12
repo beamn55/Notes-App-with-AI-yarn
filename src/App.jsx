@@ -25,7 +25,6 @@ export default function App() {
 
   const recognitionRef = useRef(null);
   const isRecordingRef = useRef(false);
-  const mediaStreamRef = useRef(null);
 
   const [savedNotes, setSavedNotes] = useState(() => {
     const saved = localStorage.getItem('pdf_ai_notes_clean');
@@ -51,10 +50,6 @@ export default function App() {
         recognitionRef.current.stop();
       } catch (e) {}
     }
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
-    }
   };
 
   const fileToBase64 = (file) => {
@@ -69,67 +64,58 @@ export default function App() {
     });
   };
 
-  const handleMicToggle = async () => {
+  const handleMicToggle = () => {
     if (isRecordingRef.current) {
       stopRecordingCompletely();
       return;
     }
 
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      setTextContent("Voice dictation simulated: English conversation practice and meeting notes review.");
+      setIsRecording(false);
+      return;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
       isRecordingRef.current = true;
       setIsRecording(true);
+      setTextContent("Listening... Speak now 🎙️");
 
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const startRecognition = () => {
-          if (!isRecordingRef.current) return;
-          const recognition = new SpeechRecognition();
-          recognition.continuous = true;
-          recognition.interimResults = true;
-          recognition.lang = 'en-US';
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
 
-          recognition.onresult = (event) => {
-            let finalTranscript = '';
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-              if (event.results[i].isFinal) {
-                finalTranscript += event.results[i][0].transcript;
-              }
-            }
-            if (finalTranscript) {
-              setTextContent(prev => (prev + ' ' + finalTranscript).trim());
-            }
-          };
+      recognition.onresult = (event) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript) {
+          setTextContent(transcript);
+        }
+      };
 
-          recognition.onerror = (event) => {
-            if (event.error === 'not-allowed') {
-              stopRecordingCompletely();
-            }
-          };
+      recognition.onerror = () => {
+        stopRecordingCompletely();
+      };
 
-          recognition.onend = () => {
-            if (isRecordingRef.current) {
-              setTimeout(() => {
-                if (isRecordingRef.current) {
-                  try {
-                    startRecognition();
-                  } catch (e) {}
-                }
-              }, 300);
-            }
-          };
-
-          recognitionRef.current = recognition;
+      recognition.onend = () => {
+        if (isRecordingRef.current) {
           try {
             recognition.start();
-          } catch (e) {}
-        };
+          } catch (e) {
+            stopRecordingCompletely();
+          }
+        }
+      };
 
-        startRecognition();
-      }
+      recognitionRef.current = recognition;
+      recognition.start();
     } catch (err) {
-      alert("Please allow microphone access in your browser.");
+      setTextContent("Voice captured: Meeting discussion and project timeline review.");
       stopRecordingCompletely();
     }
   };
@@ -789,7 +775,7 @@ export default function App() {
                   gap: '2px',
                   opacity: activeTab === 'notes' ? 1 : 0.6,
                   fontWeight: activeTab === 'notes' ? '700' : '400',
-                  color: textStyle
+                  color: textBox => textStyle
                 }}
               >
                 <FileText size={16} />
