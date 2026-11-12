@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Upload, FileText, Settings, Moon, Sun, Sparkles, Send, Trash2, MessageSquare } from 'lucide-react';
 
 export default function App() {
@@ -22,6 +22,8 @@ export default function App() {
   const [chatQuery, setChatQuery] = useState('');
   const [chatAnswer, setChatAnswer] = useState('');
   const [isSearchingNotes, setIsSearchingNotes] = useState(false);
+
+  const recognitionRef = useRef(null);
 
   const [savedNotes, setSavedNotes] = useState(() => {
     const saved = localStorage.getItem('pdf_ai_notes_clean');
@@ -52,31 +54,58 @@ export default function App() {
   };
 
   const handleMicToggle = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
       alert("Speech recognition is not supported in this browser.");
       return;
     }
 
     if (isRecording) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
       setIsRecording(false);
     } else {
-      setIsRecording(true);
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
 
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setTextContent(transcript);
+        recognition.onstart = () => {
+          setIsRecording(true);
+        };
+
+        recognition.onresult = (event) => {
+          let interimTranscript = '';
+          let finalTranscript = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript;
+            } else {
+              interimTranscript += event.results[i][0].transcript;
+            }
+          }
+          if (finalTranscript || interimTranscript) {
+            setTextContent(prev => prev + ' ' + (finalTranscript || interimTranscript));
+          }
+        };
+
+        recognition.onerror = (event) => {
+          console.error("Speech recognition error", event.error);
+          setIsRecording(false);
+        };
+
+        recognition.onend = () => {
+          setIsRecording(false);
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+      } catch (error) {
+        console.error(error);
         setIsRecording(false);
-      };
-
-      recognition.onerror = () => setIsRecording(false);
-      recognition.onend = () => setIsRecording(false);
-
-      recognition.start();
+      }
     }
   };
 
@@ -106,7 +135,13 @@ export default function App() {
   };
 
   const handleProcessWithAI = async () => {
-    if (inputMode === 'text' && !textContent.trim()) return;
+    if (isRecording && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+    }
+
+    if (inputMode === 'text' && !textContent.trim() && !selectedFile) return;
+    if (inputMode === 'mic' && !textContent.trim()) return;
     if (inputMode === 'upload' && !selectedFile) return;
 
     setLoading(true);
@@ -336,7 +371,13 @@ export default function App() {
                     {['text', 'mic', 'upload'].map((mode) => (
                       <button 
                         key={mode}
-                        onClick={() => setInputMode(mode)}
+                        onClick={() => {
+                          if (isRecording && recognitionRef.current) {
+                            recognitionRef.current.stop();
+                            setIsRecording(false);
+                          }
+                          setInputMode(mode);
+                        }}
                         style={{
                           padding: '7px 0',
                           borderRadius: '10px',
@@ -489,7 +530,7 @@ export default function App() {
                     }}
                   >
                     {loading ? <Sparkles className="animate-spin" size={15} /> : <Send size={13} />}
-                    <span>{loading ? "Transcribing & Analyzing Audio..." : "Process Note with AI ✨"}</span>
+                    <span>{loading ? "Processing Note..." : "Process Note with AI ✨"}</span>
                   </button>
 
                   <div style={{
@@ -700,7 +741,13 @@ export default function App() {
               borderTop: darkMode ? '2px solid #4928C2' : '2px solid #FDA8BF'
             }}>
               <button 
-                onClick={() => setActiveTab('notes')}
+                onClick={() => {
+                  if (isRecording && recognitionRef.current) {
+                    recognitionRef.current.stop();
+                    setIsRecording(false);
+                  }
+                  setActiveTab('notes');
+                }}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -718,7 +765,13 @@ export default function App() {
                 <span style={{ fontSize: '8px' }}>Notes</span>
               </button>
               <button 
-                onClick={() => setActiveTab('settings')}
+                onClick={() => {
+                  if (isRecording && recognitionRef.current) {
+                    recognitionRef.current.stop();
+                    setIsRecording(false);
+                  }
+                  setActiveTab('settings');
+                }}
                 style={{
                   background: 'none',
                   border: 'none',
