@@ -15,7 +15,6 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
   const [authError, setAuthError] = useState('');
 
   const [apiKey, setApiKey] = useState(() => {
@@ -26,6 +25,7 @@ export default function App() {
   const [inputMode, setInputMode] = useState('text');
   const [textContent, setTextContent] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [recordedAudioUrl, setRecordedAudioUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [saveMessage, setSaveMessage] = useState(false);
@@ -50,7 +50,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('pdf_ai_notes_clean', JSON.stringify(savedNotes));
+    try {
+      localStorage.setItem('pdf_ai_notes_clean', JSON.stringify(savedNotes));
+    } catch (e) {}
   }, [savedNotes]);
 
   const handleAuthSubmit = (e) => {
@@ -58,28 +60,20 @@ export default function App() {
     setAuthError('');
 
     if (!loginUser.trim() || !loginPass.trim()) {
-      setAuthError('Punan ang lahat ng espasyo.');
+      setAuthError('Please fill in all fields.');
       return;
     }
 
-    if (isRegistering) {
+    if (!registeredUser) {
       localStorage.setItem('app_username', loginUser);
       localStorage.setItem('app_password', loginPass);
       setRegisteredUser(loginUser);
       setRegisteredPass(loginPass);
       setIsLoggedIn(true);
+    } else if (loginUser === registeredUser && loginPass === registeredPass) {
+      setIsLoggedIn(true);
     } else {
-      if (!registeredUser) {
-        localStorage.setItem('app_username', loginUser);
-        localStorage.setItem('app_password', loginPass);
-        setRegisteredUser(loginUser);
-        setRegisteredPass(loginPass);
-        setIsLoggedIn(true);
-      } else if (loginUser === registeredUser && loginPass === registeredPass) {
-        setIsLoggedIn(true);
-      } else {
-        setAuthError('Maling Username o Password.');
-      }
+      setAuthError('Invalid Username or Password.');
     }
   };
 
@@ -98,6 +92,7 @@ export default function App() {
 
     try {
       audioChunksRef.current = [];
+      setRecordedAudioUrl(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -110,6 +105,12 @@ export default function App() {
 
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach(track => track.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          setRecordedAudioUrl(reader.result);
+        };
         setTextContent("[Voice Recording Note Captured Successfully]");
       };
 
@@ -134,18 +135,35 @@ export default function App() {
     });
   };
 
+  const fileToDataUrl = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
   const generateDynamicAnalysis = (input) => {
     const lower = input.toLowerCase();
     let summary = `Summary: Voice/Text transcription captured: "${input.length > 60 ? input.slice(0, 60) + '...' : input}".`;
 
     let actions = [];
-    if (lower.includes('tomorrow')) actions.push('Task scheduled for tomorrow');
-    if (lower.includes('friday') || lower.includes('monday') || lower.includes('tuesday') || lower.includes('next week')) {
+    if (lower.includes('tomorrow') || lower.includes('bukas')) {
+      actions.push('Task scheduled for tomorrow');
+    }
+    if (lower.includes('friday') || lower.includes('monday') || lower.includes('tuesday') || lower.includes('next week') || lower.includes('susunod na linggo')) {
       actions.push('Follow up on upcoming schedule or deadline');
     }
-    if (lower.includes('submit') || lower.includes('send') || lower.includes('email')) actions.push('Submit or send requested files');
-    if (lower.includes('meeting') || lower.includes('call') || lower.includes('discuss')) actions.push('Prepare notes for scheduled discussion');
-    if (lower.includes('practice') || lower.includes('review') || lower.includes('study') || lower.includes('lunch')) actions.push('Complete practice session and review notes');
+    if (lower.includes('submit') || lower.includes('send') || lower.includes('email') || lower.includes('ipasa') || lower.includes('isend')) {
+      actions.push('Submit or send requested files');
+    }
+    if (lower.includes('meeting') || lower.includes('call') || lower.includes('discuss') || lower.includes('usap') || lower.includes('pulong')) {
+      actions.push('Prepare notes for scheduled discussion');
+    }
+    if (lower.includes('practice') || lower.includes('review') || lower.includes('study') || lower.includes('aral') || lower.includes('lunch')) {
+      actions.push('Complete session and review notes');
+    }
     
     let actionStr = actions.length > 0 ? actions.join('; ') : 'None detected in audio/text';
 
@@ -171,35 +189,40 @@ export default function App() {
     setLoading(true);
     let summaryText = "";
     let rawContent = textContent;
+    let noteAudio = inputMode === 'mic' ? recordedAudioUrl : null;
 
     try {
-      if (inputMode === 'upload' && selectedFile && apiKey && apiKey.length > 10) {
-        const base64Audio = await fileToBase64(selectedFile);
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: "Listen to this audio. Transcribe the spoken words, summarize, extract action items, and provide 3 hashtags:\nSummary: [Summary]\nActionItems: [Tasks or None]\nTags: [3 Hashtags]" },
-                { inline_data: { mime_type: selectedFile.type || "audio/mp3", data: base64Audio } }
-              ]
-            }]
-          })
-        });
+      if (inputMode === 'upload' && selectedFile) {
+        noteAudio = await fileToDataUrl(selectedFile);
+        if (apiKey && apiKey.length > 10) {
+          const base64Audio = await fileToBase64(selectedFile);
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: "Listen to this audio (which may be in English or Tagalog). Transcribe the spoken words, summarize in English, extract action items, and provide 3 hashtags:\nSummary: [Summary]\nActionItems: [Tasks or None]\nTags: [3 Hashtags]" },
+                  { inline_data: { mime_type: selectedFile.type || "audio/mp3", data: base64Audio } }
+                ]
+              }]
+            })
+          });
 
-        const data = await response.json();
-        if (data.candidates && data.candidates[0].content.parts[0].text) {
-          summaryText = data.candidates[0].content.parts[0].text;
-          rawContent = `[Audio File: ${selectedFile.name}]`;
+          const data = await response.json();
+          if (data.candidates && data.candidates[0].content.parts[0].text) {
+            summaryText = data.candidates[0].content.parts[0].text;
+            rawContent = `[Audio File: ${selectedFile.name}]`;
+          } else {
+            rawContent = selectedFile.name;
+            summaryText = generateDynamicAnalysis(selectedFile.name);
+          }
         } else {
           rawContent = selectedFile.name;
-          summaryText = generateDynamicAnalysis(selectedFile.name);
+          await new Promise(resolve => setTimeout(resolve, 800));
+          summaryText = generateDynamicAnalysis(rawContent);
         }
       } else {
-        if (inputMode === 'upload' && selectedFile) {
-          rawContent = selectedFile.name;
-        }
         await new Promise(resolve => setTimeout(resolve, 800));
         summaryText = generateDynamicAnalysis(rawContent);
       }
@@ -211,12 +234,14 @@ export default function App() {
       id: Date.now(),
       content: rawContent,
       fullAnalysis: summaryText,
+      audioUrl: noteAudio,
       date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
     setSavedNotes([newNote, ...savedNotes]);
     setLoading(false);
     setTextContent('');
+    setRecordedAudioUrl(null);
     setSelectedFile(null);
   };
 
@@ -360,7 +385,7 @@ export default function App() {
                 AI Notes App ✨
               </h1>
               <p style={{ fontSize: '11px', opacity: 0.8, margin: '4px 0 0 0' }}>
-                {registeredUser ? "Mag-log in para buksan ang iyong notes" : "Gumawa ng Account para magsimula"}
+                {registeredUser ? "Sign in to access your saved notes" : "Create an account to get started"}
               </p>
             </div>
 
@@ -379,7 +404,7 @@ export default function App() {
                   type="text" 
                   value={loginUser}
                   onChange={(e) => setLoginUser(e.target.value)}
-                  placeholder="Ilagay ang iyong pangalan..."
+                  placeholder="Enter your name..."
                   style={{
                     width: '100%',
                     padding: '10px',
@@ -402,7 +427,7 @@ export default function App() {
                   type="password" 
                   value={loginPass}
                   onChange={(e) => setLoginPass(e.target.value)}
-                  placeholder="Ilagay ang password..."
+                  placeholder="Enter password..."
                   style={{
                     width: '100%',
                     padding: '10px',
@@ -433,7 +458,7 @@ export default function App() {
                   boxShadow: '0 4px 10px rgba(0,0,0,0.15)'
                 }}
               >
-                {registeredUser ? "Mag-log in ✨" : "Gumawa ng Account 🚀"}
+                {registeredUser ? "Sign In ✨" : "Create Account 🚀"}
               </button>
             </form>
           </div>
@@ -513,7 +538,7 @@ export default function App() {
                       <textarea 
                         value={textContent}
                         onChange={(e) => setTextContent(e.target.value)}
-                        placeholder="Brain-dump your ideas or meeting notes here..."
+                        placeholder="Brain-dump your ideas or meeting notes (English or Tagalog)..."
                         style={{
                           width: '100%',
                           height: '90px',
@@ -537,7 +562,7 @@ export default function App() {
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      padding: '20px',
+                      padding: '16px',
                       borderRadius: '16px',
                       border: `2px dashed ${primaryColor}`,
                       backgroundColor: secondaryBg + '33',
@@ -565,13 +590,22 @@ export default function App() {
                       <p style={{ fontSize: '10px', fontWeight: '700', margin: 0 }}>
                         {isRecording ? "Recording active... Tap again to stop 🔴" : "Tap mic to start voice recording"}
                       </p>
+
+                      {recordedAudioUrl && !isRecording && (
+                        <audio 
+                          controls 
+                          src={recordedAudioUrl} 
+                          style={{ width: '100%', height: '32px', marginTop: '4px', borderRadius: '8px' }} 
+                        />
+                      )}
+
                       <textarea
                         value={textContent}
                         onChange={(e) => setTextContent(e.target.value)}
-                        placeholder="Voice notes or description will appear here..."
+                        placeholder="Voice notes or description (English or Tagalog)..."
                         style={{
                           width: '100%',
-                          height: '60px',
+                          height: '55px',
                           padding: '8px',
                           marginTop: '4px',
                           borderRadius: '10px',
@@ -733,7 +767,7 @@ export default function App() {
                           backgroundColor: cardBg,
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: '4px',
+                          gap: '6px',
                           boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -746,6 +780,13 @@ export default function App() {
                               <Trash2 size={13} />
                             </button>
                           </div>
+                          {note.audioUrl && (
+                            <audio 
+                              controls 
+                              src={note.audioUrl} 
+                              style={{ width: '100%', height: '28px', borderRadius: '6px' }} 
+                            />
+                          )}
                           <p style={{ fontSize: '10px', lineHeight: '1.4', margin: 0, whiteSpace: 'pre-wrap' }}>
                             {note.fullAnalysis}
                           </p>
@@ -849,7 +890,7 @@ export default function App() {
                       color: '#FFFFFF'
                     }}
                   >
-                    Log out 🚪
+                    Sign Out 🚪
                   </button>
                 </div>
               )}
