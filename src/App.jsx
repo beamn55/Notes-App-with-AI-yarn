@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Upload, FileText, Settings, Moon, Sun, Sparkles, Send, Trash2, MessageSquare, Lock, User } from 'lucide-react';
+import { Mic, Upload, FileText, Settings, Moon, Sun, Sparkles, Send, Trash2, MessageSquare, User } from 'lucide-react';
 
 export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(true);
@@ -8,14 +8,9 @@ export default function App() {
   const [registeredUser, setRegisteredUser] = useState(() => {
     return localStorage.getItem('app_username') || '';
   });
-  const [registeredPass, setRegisteredPass] = useState(() => {
-    return localStorage.getItem('app_password') || '';
-  });
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginUser, setLoginUser] = useState('');
-  const [loginPass, setLoginPass] = useState('');
-  const [authError, setAuthError] = useState('');
 
   const [apiKey, setApiKey] = useState(() => {
     return localStorage.getItem('gemini_api_key') || '';
@@ -57,24 +52,11 @@ export default function App() {
 
   const handleAuthSubmit = (e) => {
     e.preventDefault();
-    setAuthError('');
+    if (!loginUser.trim()) return;
 
-    if (!loginUser.trim() || !loginPass.trim()) {
-      setAuthError('Please fill in all fields.');
-      return;
-    }
-
-    if (!registeredUser) {
-      localStorage.setItem('app_username', loginUser);
-      localStorage.setItem('app_password', loginPass);
-      setRegisteredUser(loginUser);
-      setRegisteredPass(loginPass);
-      setIsLoggedIn(true);
-    } else if (loginUser === registeredUser && loginPass === registeredPass) {
-      setIsLoggedIn(true);
-    } else {
-      setAuthError('Invalid Username or Password.');
-    }
+    localStorage.setItem('app_username', loginUser);
+    setRegisteredUser(loginUser);
+    setIsLoggedIn(true);
   };
 
   const stopAudioRecording = () => {
@@ -202,7 +184,7 @@ export default function App() {
             body: JSON.stringify({
               contents: [{
                 parts: [
-                  { text: "Listen to this audio (which may be in English or Tagalog). Transcribe the spoken words, summarize in English, extract action items, and provide 3 hashtags:\nSummary: [Summary]\nActionItems: [Tasks or None]\nTags: [3 Hashtags]" },
+                  { text: "Listen to this audio. Transcribe the spoken words, summarize in English, extract action items, and provide 3 hashtags:\nSummary: [Summary]\nActionItems: [Tasks or None]\nTags: [3 Hashtags]" },
                   { inline_data: { mime_type: selectedFile.type || "audio/mp3", data: base64Audio } }
                 ]
               }]
@@ -385,49 +367,20 @@ export default function App() {
                 AI Notes App ✨
               </h1>
               <p style={{ fontSize: '11px', opacity: 0.8, margin: '4px 0 0 0' }}>
-                {registeredUser ? "Sign in to access your saved notes" : "Create an account to get started"}
+                Enter your name to start taking notes
               </p>
             </div>
 
             <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {authError && (
-                <p style={{ fontSize: '10px', color: '#ef4444', fontWeight: '700', textAlign: 'center', margin: 0 }}>
-                  {authError}
-                </p>
-              )}
-
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '10px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <User size={12} /> Username:
+                  <User size={12} /> Your Name:
                 </label>
                 <input 
                   type="text" 
                   value={loginUser}
                   onChange={(e) => setLoginUser(e.target.value)}
-                  placeholder="Enter your name..."
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    borderRadius: '12px',
-                    border: `1px solid ${primaryColor}`,
-                    outline: 'none',
-                    fontSize: '11px',
-                    fontFamily: "'Fredoka', sans-serif",
-                    backgroundColor: cardBg,
-                    color: textStyle
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '10px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Lock size={12} /> Password:
-                </label>
-                <input 
-                  type="password" 
-                  value={loginPass}
-                  onChange={(e) => setLoginPass(e.target.value)}
-                  placeholder="Enter password..."
+                  placeholder="Enter name..."
                   style={{
                     width: '100%',
                     padding: '10px',
@@ -458,7 +411,7 @@ export default function App() {
                   boxShadow: '0 4px 10px rgba(0,0,0,0.15)'
                 }}
               >
-                {registeredUser ? "Sign In ✨" : "Create Account 🚀"}
+                Start App 🚀
               </button>
             </form>
           </div>
@@ -923,7 +876,7 @@ export default function App() {
                   color: textStyle
                 }}
               >
-                <FileText size={16} />
+                <FileText size5={16} />
                 <span style={{ fontSize: '8px' }}>Notes</span>
               </button>
               <button 
