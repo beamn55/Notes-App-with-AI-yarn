@@ -1,12 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Upload, FileText, Settings, Moon, Sun, Sparkles, Send, Trash2, MessageSquare } from 'lucide-react';
+import { Mic, Upload, FileText, Settings, Moon, Sun, Sparkles, Send, Trash2, MessageSquare, Lock, User } from 'lucide-react';
 
 export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   
+  const [registeredUser, setRegisteredUser] = useState(() => {
+    return localStorage.getItem('app_username') || '';
+  });
+  const [registeredPass, setRegisteredPass] = useState(() => {
+    return localStorage.getItem('app_password') || '';
+  });
+
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [authError, setAuthError] = useState('');
+
   const [apiKey, setApiKey] = useState(() => {
     return localStorage.getItem('gemini_api_key') || '';
   });
@@ -41,6 +52,36 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('pdf_ai_notes_clean', JSON.stringify(savedNotes));
   }, [savedNotes]);
+
+  const handleAuthSubmit = (e) => {
+    e.preventDefault();
+    setAuthError('');
+
+    if (!loginUser.trim() || !loginPass.trim()) {
+      setAuthError('Punan ang lahat ng espasyo.');
+      return;
+    }
+
+    if (isRegistering) {
+      localStorage.setItem('app_username', loginUser);
+      localStorage.setItem('app_password', loginPass);
+      setRegisteredUser(loginUser);
+      setRegisteredPass(loginPass);
+      setIsLoggedIn(true);
+    } else {
+      if (!registeredUser) {
+        localStorage.setItem('app_username', loginUser);
+        localStorage.setItem('app_password', loginPass);
+        setRegisteredUser(loginUser);
+        setRegisteredPass(loginPass);
+        setIsLoggedIn(true);
+      } else if (loginUser === registeredUser && loginPass === registeredPass) {
+        setIsLoggedIn(true);
+      } else {
+        setAuthError('Maling Username o Password.');
+      }
+    }
+  };
 
   const stopAudioRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
@@ -305,6 +346,97 @@ export default function App() {
               </p>
             </div>
           </div>
+        ) : !isLoggedIn ? (
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            padding: '24px',
+            gap: '16px'
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <h1 style={{ fontSize: '22px', fontWeight: '700', color: primaryColor, margin: 0 }}>
+                AI Notes App ✨
+              </h1>
+              <p style={{ fontSize: '11px', opacity: 0.8, margin: '4px 0 0 0' }}>
+                {registeredUser ? "Mag-log in para buksan ang iyong notes" : "Gumawa ng Account para magsimula"}
+              </p>
+            </div>
+
+            <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {authError && (
+                <p style={{ fontSize: '10px', color: '#ef4444', fontWeight: '700', textAlign: 'center', margin: 0 }}>
+                  {authError}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '10px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <User size={12} /> Username:
+                </label>
+                <input 
+                  type="text" 
+                  value={loginUser}
+                  onChange={(e) => setLoginUser(e.target.value)}
+                  placeholder="Ilagay ang iyong pangalan..."
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: '12px',
+                    border: `1px solid ${primaryColor}`,
+                    outline: 'none',
+                    fontSize: '11px',
+                    fontFamily: "'Fredoka', sans-serif",
+                    backgroundColor: cardBg,
+                    color: textStyle
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '10px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Lock size={12} /> Password:
+                </label>
+                <input 
+                  type="password" 
+                  value={loginPass}
+                  onChange={(e) => setLoginPass(e.target.value)}
+                  placeholder="Ilagay ang password..."
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: '12px',
+                    border: `1px solid ${primaryColor}`,
+                    outline: 'none',
+                    fontSize: '11px',
+                    fontFamily: "'Fredoka', sans-serif",
+                    backgroundColor: cardBg,
+                    color: textStyle
+                  }}
+                />
+              </div>
+
+              <button 
+                type="submit"
+                style={{
+                  width: '100%',
+                  padding: '11px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  fontWeight: '700',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  backgroundColor: primaryColor,
+                  color: darkMode ? '#040607' : '#FFFFFF',
+                  marginTop: '6px',
+                  boxShadow: '0 4px 10px rgba(0,0,0,0.15)'
+                }}
+              >
+                {registeredUser ? "Mag-log in ✨" : "Gumawa ng Account 🚀"}
+              </button>
+            </form>
+          </div>
         ) : (
           <>
             <div style={{
@@ -320,7 +452,7 @@ export default function App() {
                   AI Notes App ✨
                 </h1>
                 <p style={{ fontSize: '10px', fontWeight: '600', margin: '2px 0 0 0', opacity: 0.8 }}>
-                  ✦ Voice Dictation & RAG Search
+                  👤 Welcome, {registeredUser}!
                 </p>
               </div>
               <button 
@@ -643,12 +775,11 @@ export default function App() {
                   )}
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: '600' }}>Username:</label>
+                    <label style={{ fontSize: '10px', fontWeight: '600' }}>Active Account:</label>
                     <input 
                       type="text" 
-                      value={username} 
-                      placeholder="Enter username..."
-                      onChange={(e) => setUsername(e.target.value)}
+                      value={registeredUser} 
+                      disabled
                       style={{
                         width: '100%',
                         padding: '8px 10px',
@@ -658,27 +789,7 @@ export default function App() {
                         fontSize: '10px',
                         fontFamily: "'Fredoka', sans-serif",
                         backgroundColor: cardBg,
-                        color: textStyle
-                      }}
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <label style={{ fontSize: '10px', fontWeight: '600' }}>Password:</label>
-                    <input 
-                      type="password" 
-                      value={password} 
-                      placeholder="Enter password..."
-                      onChange={(e) => setPassword(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 10px',
-                        borderRadius: '10px',
-                        border: '1px solid #FDA8BF',
-                        outline: 'none',
-                        fontSize: '10px',
-                        fontFamily: "'Fredoka', sans-serif",
-                        backgroundColor: cardBg,
+                        opacity: 0.7,
                         color: textStyle
                       }}
                     />
@@ -721,6 +832,24 @@ export default function App() {
                     }}
                   >
                     Save Settings 💾
+                  </button>
+
+                  <button 
+                    onClick={() => setIsLoggedIn(false)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      fontWeight: '700',
+                      fontSize: '10px',
+                      cursor: 'pointer',
+                      marginTop: '10px',
+                      backgroundColor: '#ef4444',
+                      color: '#FFFFFF'
+                    }}
+                  >
+                    Log out 🚪
                   </button>
                 </div>
               )}
