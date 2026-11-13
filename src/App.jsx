@@ -76,7 +76,9 @@ export default function App() {
       audioChunksRef.current = [];
       setRecordedAudioUrl(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      
+      const options = { mimeType: 'audio/webm' };
+      const mediaRecorder = new MediaRecorder(stream, MediaRecorder.isTypeSupported('audio/webm') ? options : {});
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
@@ -88,17 +90,14 @@ export default function App() {
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach(track => track.stop());
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const reader = new FileReader();
-        reader.readAsDataURL(audioBlob);
-        reader.onloadend = () => {
-          setRecordedAudioUrl(reader.result);
-        };
+        const audioUrl = URL.createObjectURL(audioBlob);
+        setRecordedAudioUrl(audioUrl);
         setTextContent("[Voice Recording Note Captured Successfully]");
       };
 
       mediaRecorder.start();
       setIsRecording(true);
-      setTextContent("Recording audio... Speak now (Tap mic again to stop) 🎙️🔴");
+      setTextContent("Recording active... Speak now (Tap mic again to stop) 🎙️🔴");
     } catch (err) {
       alert("Microphone access blocked or not supported by browser.");
       setIsRecording(false);
@@ -876,7 +875,7 @@ export default function App() {
                   color: textStyle
                 }}
               >
-                <FileText size5={16} />
+                <FileText size={16} />
                 <span style={{ fontSize: '8px' }}>Notes</span>
               </button>
               <button 
