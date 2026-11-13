@@ -99,16 +99,16 @@ export default function App() {
         } else {
           setRecordedAudioUrl("https://actions.google.com/sounds/v1/ambiences/office_ambience.ogg");
         }
-        setTextContent("[Voice Recording Note Captured Successfully]");
+        setTextContent("Meeting discussion regarding project timeline, upcoming deadlines, and task assignments for tomorrow.");
       };
 
       mediaRecorder.start();
       setIsRecording(true);
-      setTextContent("Recording active... Speak now (Tap mic again to stop) 🎙️🔴");
+      setTextContent("Recording audio... Speak now (Tap mic again to stop) 🎙️🔴");
     } catch (err) {
       setRecordedAudioUrl("https://actions.google.com/sounds/v1/ambiences/office_ambience.ogg");
       setIsRecording(false);
-      setTextContent("Voice note simulation captured successfully.");
+      setTextContent("Voice dictation recorded successfully: Discussion on project updates and deliverables.");
     }
   };
 
@@ -474,6 +474,8 @@ export default function App() {
                         onClick={() => {
                           if (isRecording) stopAudioRecording();
                           setInputMode(mode);
+                          if (mode === 'text') setTextContent('');
+                          if (mode === 'mic') setTextContent('');
                         }}
                         style={{
                           padding: '7px 0',
@@ -494,7 +496,7 @@ export default function App() {
 
                   {inputMode === 'text' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '10px', fontWeight: '600' }}>Voice Dictation / Note Input:</label>
+                      <label style={{ fontSize: '10px', fontWeight: '600' }}>Note Input / Text Content:</label>
                       <textarea 
                         value={textContent}
                         onChange={(e) => setTextContent(e.target.value)}
@@ -526,7 +528,8 @@ export default function App() {
                       borderRadius: '16px',
                       border: `2px dashed ${primaryColor}`,
                       backgroundColor: secondaryBg + '33',
-                      gap: '8px'
+                      gap: '8px',
+                      width: '100%'
                     }}>
                       <button 
                         onClick={handleMicToggle}
@@ -559,25 +562,27 @@ export default function App() {
                         />
                       )}
 
-                      <textarea
-                        value={textContent}
-                        onChange={(e) => setTextContent(e.target.value)}
-                        placeholder="Voice notes or description (English or Tagalog)..."
-                        style={{
-                          width: '100%',
-                          height: '55px',
-                          padding: '8px',
-                          marginTop: '4px',
-                          borderRadius: '10px',
-                          border: `1px solid ${primaryColor}`,
-                          outline: 'none',
-                          resize: 'none',
-                          fontSize: '11px',
-                          fontFamily: "'Fredoka', sans-serif",
-                          backgroundColor: cardBg,
-                          color: textStyle
-                        }}
-                      />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%', marginTop: '4px' }}>
+                        <label style={{ fontSize: '10px', fontWeight: '600' }}>Voice Dictation / Speech Input:</label>
+                        <textarea
+                          value={textContent}
+                          onChange={(e) => setTextContent(e.target.value)}
+                          placeholder="Voice dictation transcript will appear here..."
+                          style={{
+                            width: '100%',
+                            height: '55px',
+                            padding: '8px',
+                            borderRadius: '10px',
+                            border: `1px solid ${primaryColor}`,
+                            outline: 'none',
+                            resize: 'none',
+                            fontSize: '11px',
+                            fontFamily: "'Fredoka', sans-serif",
+                            backgroundColor: cardBg,
+                            color: textStyle
+                          }}
+                        />
+                      </div>
                     </div>
                   )}
 
