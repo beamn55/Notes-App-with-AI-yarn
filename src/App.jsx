@@ -99,7 +99,7 @@ export default function App() {
         } else {
           setRecordedAudioUrl("https://actions.google.com/sounds/v1/ambiences/office_ambience.ogg");
         }
-        setTextContent("Meeting discussion regarding project timeline, upcoming deadlines, and task assignments for tomorrow.");
+        setTextContent("Meeting discussion regarding project timeline, upcoming deadlines, and task assignments.");
       };
 
       mediaRecorder.start();
@@ -108,7 +108,7 @@ export default function App() {
     } catch (err) {
       setRecordedAudioUrl("https://actions.google.com/sounds/v1/ambiences/office_ambience.ogg");
       setIsRecording(false);
-      setTextContent("Voice dictation recorded successfully: Discussion on project updates and deliverables.");
+      setTextContent("Voice dictation note: Discussion on project updates and deliverables.");
     }
   };
 
@@ -135,7 +135,7 @@ export default function App() {
 
   const generateDynamicAnalysis = (input) => {
     const lower = input.toLowerCase();
-    let summary = `Summary: Voice/Text transcription captured: "${input.length > 60 ? input.slice(0, 60) + '...' : input}".`;
+    let summary = `Summary: Note content captured: "${input}".`;
 
     let actions = [];
     if (lower.includes('tomorrow') || lower.includes('bukas')) {
@@ -154,14 +154,14 @@ export default function App() {
       actions.push('Complete session and review notes');
     }
     
-    let actionStr = actions.length > 0 ? actions.join('; ') : 'None detected in audio/text';
+    let actionStr = actions.length > 0 ? actions.join('; ') : 'None detected in note';
 
     let words = input.trim().split(/\s+/);
     let topWords = Array.from(new Set(words.filter(w => w.length > 3)))
       .slice(0, 3)
       .map(w => `#${w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()}`);
 
-    let tags = topWords.length > 0 ? topWords : ['#AudioTranscribe', '#SmartNotes', '#AIProcessed'];
+    let tags = topWords.length > 0 ? topWords : ['#SmartNotes', '#AIProcessed'];
 
     return `${summary}\nActionItems: ${actionStr}\nTags: ${tags.slice(0, 3).join(', ')}`;
   };
@@ -171,18 +171,20 @@ export default function App() {
       stopAudioRecording();
     }
 
-    if (inputMode === 'text' && !textContent.trim() && !selectedFile) return;
-    if (inputMode === 'mic' && !textContent.trim()) return;
+    const currentText = textContent.trim();
+    if (inputMode === 'text' && !currentText && !selectedFile) return;
+    if (inputMode === 'mic' && !currentText) return;
     if (inputMode === 'upload' && !selectedFile) return;
 
     setLoading(true);
     let summaryText = "";
-    let rawContent = textContent;
+    let rawContent = currentText;
     let noteAudio = inputMode === 'mic' ? (recordedAudioUrl || "https://actions.google.com/sounds/v1/ambiences/office_ambience.ogg") : null;
 
     try {
       if (inputMode === 'upload' && selectedFile) {
         noteAudio = await fileToDataUrl(selectedFile);
+        rawContent = `[Audio File: ${selectedFile.name}]`;
         if (apiKey && apiKey.length > 10) {
           const base64Audio = await fileToBase64(selectedFile);
           const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
@@ -201,22 +203,19 @@ export default function App() {
           const data = await response.json();
           if (data.candidates && data.candidates[0].content.parts[0].text) {
             summaryText = data.candidates[0].content.parts[0].text;
-            rawContent = `[Audio File: ${selectedFile.name}]`;
           } else {
-            rawContent = selectedFile.name;
             summaryText = generateDynamicAnalysis(selectedFile.name);
           }
         } else {
-          rawContent = selectedFile.name;
           await new Promise(resolve => setTimeout(resolve, 800));
-          summaryText = generateDynamicAnalysis(rawContent);
+          summaryText = generateDynamicAnalysis(selectedFile.name);
         }
       } else {
         await new Promise(resolve => setTimeout(resolve, 800));
         summaryText = generateDynamicAnalysis(rawContent);
       }
     } catch (error) {
-      summaryText = generateDynamicAnalysis(rawContent || "Audio Input Note");
+      summaryText = generateDynamicAnalysis(rawContent || "Input Note");
     }
 
     const newNote = {
@@ -227,7 +226,7 @@ export default function App() {
       date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setSavedNotes([newNote, ...savedNotes]);
+    setSavedNotes(prevNotes => [newNote, ...prevNotes]);
     setLoading(false);
     setTextContent('');
     setRecordedAudioUrl(null);
@@ -752,7 +751,10 @@ export default function App() {
                               style={{ width: '100%', height: '28px', borderRadius: '6px' }} 
                             />
                           )}
-                          <p style={{ fontSize: '10px', lineHeight: '1.4', margin: 0, whiteSpace: 'pre-wrap' }}>
+                          <p style={{ fontSize: '10px', lineHeight: '1.4', margin: 0, whiteSpace: 'pre-wrap', fontWeight: '600' }}>
+                            📝 Note: "{note.content}"
+                          </p>
+                          <p style={{ fontSize: '10px', lineHeight: '1.4', margin: 0, whiteSpace: 'pre-wrap', opacity: 0.9 }}>
                             {note.fullAnalysis}
                           </p>
                         </div>
